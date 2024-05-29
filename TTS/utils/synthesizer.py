@@ -233,7 +233,32 @@ class Synthesizer(nn.Module):
         Returns:
             List[str]: list of sentences.
         """
-        return self.seg.segment(text)
+        list = self.seg.segment(text)
+        outList = []
+        for line in list:
+            if len(line) < 390:
+                outList.append(line)
+                continue
+
+            if line[0] == '"':
+                line = line[1:]
+            if line[-1] == '"':
+                line = line[:-1]
+
+            if len(line) > 390:
+                check = self.seg.segment(line)
+                print("Warn: line too long: ", line, check, "\n\n")
+                if len(check) > 1:
+                    for lvl2 in check:
+                        if len(lvl2) > 390:
+                            print("Still problematic! ", lvl2, "\n", self.seg.segment(lvl2))
+                    outList.extend(check)
+                else:
+                    outList.append(line)
+            else:
+                outList.append(line)
+                
+        return outList
 
     def save_wav(self, wav: List[int], path: str, pipe_out=None) -> None:
         """Save the waveform as a file.
@@ -383,16 +408,20 @@ class Synthesizer(nn.Module):
         if not reference_wav:  # not voice conversion
             for sen in sens:
                 if hasattr(self.tts_model, "synthesize"):
-                    outputs = self.tts_model.synthesize(
-                        text=sen,
-                        config=self.tts_config,
-                        speaker_id=speaker_name,
-                        voice_dirs=self.voice_dir,
-                        d_vector=speaker_embedding,
-                        speaker_wav=speaker_wav,
-                        language=language_name,
-                        **kwargs,
-                    )
+                    try:
+                        outputs = self.tts_model.synthesize(
+                            text=sen,
+                            config=self.tts_config,
+                            speaker_id=speaker_name,
+                            voice_dirs=self.voice_dir,
+                            d_vector=speaker_embedding,
+                            speaker_wav=speaker_wav,
+                            language=language_name,
+                            **kwargs,
+                        )
+                    except AssertionError as err:
+                        print("AssertionError:", err, "on string: ", sen)
+                        raise err
                 else:
                     # synthesize voice
                     outputs = synthesis(
